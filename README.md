@@ -1,4 +1,4 @@
-### micrograd clone 
+### milligrad (micrograd clone)
 
 This is a little project to build a tiny automatic differentiation (autograd) engine from scratch. it is a bit of a clone of [micrograd](https://github.com/karpathy/micrograd).
 
