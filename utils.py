@@ -1,4 +1,7 @@
 from graphviz import Digraph
+import numpy as np
+import math
+from engine import Value
 
 def trace(root):
     nodes, edges = set(), set()
@@ -34,3 +37,35 @@ def draw_dot(root, format='svg', rankdir='LR'):
         dot.edge(str(id(n1)), str(id(n2)) + n2._op)
 
     return dot
+
+def numerical_gradient(f, x, eps = 1e-2):
+    orig_dtype = x.data.dtype
+    grad = np.zeros_like(x.data, dtype=np.float32)
+
+    it = np.nditer(x.data, flags=['multi_index'], op_flags=['readwrite'])
+    while not it.finished:
+        idx = it.multi_index
+        orig_val = float(x.data[idx])
+
+        x.data[idx] = np.float32(orig_val + eps)
+        f_plus = float(f(x).data)
+
+        x.data[idx] = np.float32(orig_val - eps)
+        f_minus = float(f(x).data)
+
+        x.data[idx] = np.float32(orig_val)
+
+        if math.isfinite(f_plus) and math.isfinite(f_minus):
+            grad[idx] = (f_plus - f_minus) / (2 * eps)
+        elif math.isfinite(f_plus):
+            f0 = float(f(x).data)
+            grad[idx] = (f_plus - f0) / (eps)
+        elif math.isfinite(f_minus):
+            f0 = float(f(x).data)
+            grad[idx] = (f0 - f_minus) / (eps)
+        else:
+            grad[idx] = np.nan
+
+        it.iternext()
+    return grad.astype(orig_dtype, copy=False)
+          # array([0.738..., nan], dtype=float32)

@@ -1,5 +1,5 @@
 from engine import *
-from graph_utils import draw_dot
+from utils import draw_dot
 
 class Module:
     """

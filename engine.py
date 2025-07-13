@@ -118,10 +118,19 @@ class Value:
         out = Value(self.data @ other.data, (self, other), '@')
 
         def _backward():
+            #promote 1d operands to 2d row/col views so shapes always match
+            A = self.data if self.data.ndim > 1 else self.data.reshape(1, -1) #(1, k)
+            B = other.data if other.data.ndim > 1 else other.data.reshape(1, -1) #(k, 1)
+            dC = out.grad if out.grad.ndim > 1 else out.grad.reshape(1, -1) #(1,m) or (n, m)
+
             # dL/dA = dL/dC @ B.T
-            self.grad += out.grad @ other.data.T
+            self_contrib = dC @ B.T
             # dL/dB = A.T @ dL/dC
-            other.grad += self.data.T @ out.grad
+            other_contrib = A.T @ dC
+
+            self.grad += Value._unbroadcast(self_contrib.reshape(self.shape), self.shape)
+            other.grad += Value._unbroadcast(other_contrib.reshape(other.shape), other.shape)
+
         out._backward = _backward
         return out
 
@@ -229,13 +238,15 @@ class Value:
         return out
 
     def transpose(self, axes=None):
-        out = Value(self.data.transpose(axes, ()), 'transpose')
+        out_data = self.data.T if axes is None else np.transpose(self.data, axes)
+        out = Value(out_data, (self,), 'transpose')
 
         def _backward():
             if axes is None:
-                self.grad += out.grad.transpose()
+                self.grad += out.grad.T
             else:
-                self.grad += out.grad.transpose(np.argsort(axes))
+                inv_axes = np.argsort(axes)
+                self.grad += np.transpose(out.grad, inv_axes)
         out._backward = _backward
         return out
 
@@ -285,36 +296,36 @@ class Value:
                 node._backward = lambda : None
             self._topo_cache = None
 
-# -- Gradient-checking utility, following the definition of a derivative ------
-def gradient_check(func, inputs, eps=1-6, tol=1e-3):
-    """
-    to numerically verify gradients via a centered difference
-    :param func: function mapping named Value inputs into a single Value output.
-    :param inputs: dict of name -> Value instances.
-    :param eps: perturbation magnitude (h)
-    :param tol: tolerance for comparison
-    :return: (analytical_grads, numeric_grads_), with pass/fail per input
-    """
-    output = func(**inputs)
-    output.backward(clear_graph=True)
-    analytical = {name: inp.grad.copy() for name, inp in inputs.items()}
-
-    # compute numeric gradients
-    numeric = {}
-    for name, inp in inputs.items():
-        orig = inp.data.copy()
-        inp.data = orig + eps
-        f_plus = func(**inputs).data
-        inp.data = orig-eps
-        f_minus = func(**inputs).data
-        inp.data = orig
-        numeric[name] = (f_plus - f_minus) / (2*eps)
-
-    # compare
-    for name in inputs:
-        a, n = analytical[name], numeric[name]
-        if not np.allclose(a, n, atol=tol):
-            print(f'[FAIL] {name}: analytic={a}, numeric={n}')
-        else:
-            print(f'[PASS] {name}: analytic={a}, numeric={n}')
-    return analytical, numeric
+# # -- Gradient-checking utility, following the definition of a derivative ------
+# def gradient_check(func, inputs, eps=1e-6, tol=1e-3):
+#     """
+#     to numerically verify gradients via a centered difference
+#     :param func: function mapping named Value inputs into a single Value output.
+#     :param inputs: dict of name -> Value instances.
+#     :param eps: perturbation magnitude (h)
+#     :param tol: tolerance for comparison
+#     :return: (analytical_grads, numeric_grads_), with pass/fail per input
+#     """
+#     output = func(**inputs)
+#     output.backward(clear_graph=True)
+#     analytical = {name: inp.grad.copy() for name, inp in inputs.items()}
+#
+#     # compute numeric gradients
+#     numeric = {}
+#     for name, inp in inputs.items():
+#         orig = inp.data.copy()
+#         inp.data = orig + eps
+#         f_plus = func(**inputs).data
+#         inp.data = orig-eps
+#         f_minus = func(**inputs).data
+#         inp.data = orig
+#         numeric[name] = (f_plus - f_minus) / (2*eps)
+#
+#     # compare
+#     for name in inputs:
+#         a, n = analytical[name], numeric[name]
+#         if not np.allclose(a, n, atol=tol):
+#             print(f'[FAIL] {name}: analytic={a}, numeric={n}')
+#         else:
+#             print(f'[PASS] {name}: analytic={a}, numeric={n}')
+#     return analytical, numeric
