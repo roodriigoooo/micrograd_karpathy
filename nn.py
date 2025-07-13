@@ -1,26 +1,65 @@
-from milligrad import *
+from engine import *
 from graph_utils import draw_dot
 
-class Layer:
-    def __init__(self, num_inputs, num_outputs):
+class Module:
+    """
+    base class for all nn modules.
+    all models subclass this class
+    like in pytorch
+    """
+    def zero_grad(self):
+        for p in self.parameters():
+            p.grad.fill(0)
+
+    def parameters(self):
+        params = []
+        for attr_name in dir(self):
+            attr = getattr(self, attr_name)
+            if isinstance(attr, Value):
+                params.append(attr)
+            elif isinstance(attr, Module):
+                params.extend(attr.parameters())
+            elif isinstance(attr, list) and all(isinstance(m, Module) for m in attr):
+                for m in attr:
+                    params.extend(m.parameters())
+        return list(dict.fromkeys(params))
+
+class Layer(Module):
+    def __init__(self, num_inputs, num_outputs, activation='relu'):
+        super().__init__()
         limit = np.sqrt(6 / (num_inputs + num_outputs))
         self.w = Value(np.random.uniform(-limit, limit, (num_inputs, num_outputs)))
         self.b = Value(np.zeros(num_outputs)) #broadcasts during addition
+
+        if activation not in [None, 'tanh', 'relu']:
+            raise ValueError('Unsupported activation function. Use None, tanh, or relu, or create your own.')
+        self.activation = activation
 
     def __call__(self, x):
         # x is now a Value object containing a batch of inputs
         # e.g., shape (batch_size, num_inputs)
         act = x @ self.w + self.b
-        out = act.tanh()
-        return out
+        if self.activation == 'tanh':
+            return act.tanh()
+        elif self.activation == 'relu':
+            return act.relu()
+        else:
+            return act
+
+    def __repr__(self):
+        return f"Layer(in={self.w.shape[0]}, out={self.w.shape[1]}, act='{self.activation}')"
 
     def parameters(self):
         return [self.w, self.b]
 
-class MLP:
-    def __init__(self, num_inputs, nouts):
-        sz = [num_inputs] + nouts
-        self.layers = [Layer(sz[i], sz[i+1]) for i in range(len(nouts))]
+class MLP(Module):
+    def __init__(self, num_inputs, layer_sizes):
+        super().__init__()
+        sz = [num_inputs] + layer_sizes
+        self.layers = []
+        for i in range(len(layer_sizes)):
+            activation = 'tanh' if i < len(layer_sizes) -1 else None
+            self.layers.append(Layer(sz[i], sz[i+1], activation=activation))
 
     def __call__(self, x):
         for layer in self.layers:
@@ -30,37 +69,22 @@ class MLP:
     def parameters(self):
         return [p for layer in self.layers for p in layer.parameters()]
 
+    def __repr__(self):
+        return f'MLP of Layers: {self.layers}'
+
+class SGD:
+    """
+    stochastic gradient descent class
+    """
+    def __init__(self, params, lr=0.01):
+        self.params = params
+        self.lr = lr
+
+    def step(self):
+        for p in self.params:
+            p.data -= self.lr * p.grad
+
     def zero_grad(self):
-        """sets the gradients to zero"""
-        for p in self.parameters():
+        for p in self.params:
             p.grad.fill(0)
-
-model = MLP(3, [4, 4, 1])
-print(f'Network parameters:\n{model.parameters()}')
-
-xs = Value(np.array([
-    [2.0, 3.0, -1.0],
-    [3.0, -1.0, 0.5],
-    [0.5, 1.0, 1.0],
-    [1.0, 1.0,-1.0],
-]))
-
-ys = Value(np.array([[1.0], [-1.0], [-1.0], [1.0]]))
-lr = 0.03
-# Training loop
-for k in range(20):
-    # Forward pass
-    ypred = model(xs)
-    # Mean Squared Error Loss
-    loss = ((ypred - ys)**2).sum() # Need to implement sum()
-    model.zero_grad()
-    loss.backward()
-    for p in model.parameters():
-        p.data -= lr * p.grad
-
-    print(f'iter: {k}, loss: {loss.data}')
-
-print(f'Final predictions {model(xs)}')
-
-draw_dot(loss)
 

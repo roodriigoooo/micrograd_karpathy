@@ -46,9 +46,6 @@ class Value:
                 grad = grad.sum(axis=ax, keepdims=True)
         return grad
 
-    def __str__(self):
-        return f'Value(data={self.data})'
-
     def __repr__(self):
         return f'Value(data={self.data})'
 
@@ -71,7 +68,7 @@ class Value:
         return self + (-other)
 
     def __rsub__(self, other):
-        return self - other
+        return other + (-self)
 
     @_ensure_value
     def __mul__(self, other):
@@ -91,7 +88,7 @@ class Value:
         return self * other**-1
 
     def __rtruediv__(self, other):
-        return self/other
+        return other * self**-1
 
     def __pow__(self, other):
         if not isinstance(other, Value):
@@ -118,7 +115,6 @@ class Value:
     @_ensure_value
     # matmul for tensor operations
     def __matmul__(self, other):
-        other = other if isinstance(other, Value) else Value(other)
         out = Value(self.data @ other.data, (self, other), '@')
 
         def _backward():
@@ -130,7 +126,7 @@ class Value:
         return out
 
     def __rmatmul__(self, other):
-        return self @ other
+        return Value(other) @ self
 
     # ---- Unary operations -----------------------------
     def exp(self):
@@ -243,6 +239,17 @@ class Value:
         out._backward = _backward
         return out
 
+    def __getitem__(self, key):
+        out = Value(self.data[key], (self, ), 'slice')
+        def _backward():
+            # create a zero grad of the same shape as the original tensor
+            # and add the incoming gradient to the sliced region
+            new_grad = np.zeros_like(self.data)
+            new_grad[key] = out.grad
+            self.grad += new_grad
+        out._backward = _backward
+        return out
+
     # --- Graph utils --------------------------
 
     def _build_topo(self, visited=None, topo=None):
@@ -311,7 +318,3 @@ def gradient_check(func, inputs, eps=1-6, tol=1e-3):
         else:
             print(f'[PASS] {name}: analytic={a}, numeric={n}')
     return analytical, numeric
-
-
-
-
