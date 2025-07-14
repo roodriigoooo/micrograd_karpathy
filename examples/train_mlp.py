@@ -1,6 +1,7 @@
 import numpy as np
 from core.engine import Value
-from nn import MLP, SGD
+from nn.nn import MLP
+from optim.optim import SGD
 
 
 def main():

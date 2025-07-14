@@ -1,7 +1,9 @@
 import numpy as np
 from core.engine import Value
-from nn import MLP, SGD
+from nn.nn import MLP
+from optim.optim import SGD
 from utils import numerical_gradient
+import torch
 
 
 # --- Test Core Operations ---
@@ -104,6 +106,17 @@ def test_mul_broadcast_multiple_singletons():
     num_grad_b = numerical_gradient(lambda x: (a * x).sum(), b)
     assert np.allclose(a.grad, num_grad_a, atol=1e-3)
     assert np.allclose(b.grad, num_grad_b, atol=1e-3)
+
+def test_mean_broadcasting():
+    x = Value(np.random.randn(2,3,4).astype('float32'))
+    y = x.mean(axis=1)
+    y.backward()
+    x_grad = x.grad.copy()
+
+    tx = torch.tensor(x.data, requires_grad=True)
+    ty = tx.mean(dim=1)
+    ty.backward(torch.ones_like(ty))
+    assert np.allclose(x_grad, tx.grad.numpy(), atol=1e-3)
 
 # --- Test Tensor Operations ---
 

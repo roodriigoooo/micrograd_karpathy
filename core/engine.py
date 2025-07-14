@@ -181,7 +181,8 @@ class Value:
     def softplus(self):
         # softplus(x) = log(1+exp(x))
         # all three ops (exp, +, log) are native Value ops
-        return (self.exp() + 1).log() # again, auto-wrapped
+        abs_x = self.maximum(-self)
+        return self.maximum(0) + ((-abs_x).exp() + 1).log() # again, auto-wrapped
 
     def max(self, axis=None, keepdims=False):
         """
@@ -206,10 +207,10 @@ class Value:
         out_data = np.maximum(self.data, other.data)
         out = Value(out_data, (self, other), 'max')
         def _backward():
-            mask_self = (self.data >= other.data)
+            mask_self = (self.data > other.data)
             mask_other = ~mask_self
-            self.grad += mask_self * out.grad
-            other.grad += mask_other * out.grad
+            self.grad += Value._unbroadcast(mask_self * out.grad, self.shape)
+            other.grad += Value._unbroadcast(mask_other * out.grad, other.shape)
         out._backward = _backward
         return out
 
@@ -218,10 +219,10 @@ class Value:
         out_data = np.minimum(self.data, other.data)
         out = Value(out_data, (self, other), 'min')
         def _backward():
-            mask_self = (self.data <= other.data)
+            mask_self = (self.data < other.data)
             mask_other = ~mask_self
-            self.grad += mask_self * out.grad
-            other.grad += mask_other * out.grad
+            self.grad += Value._unbroadcast(mask_self * out.grad, self.shape)
+            other.grad += Value._unbroadcast(mask_other * out.grad, other.shape)
         out._backward = _backward
         return out
 

@@ -6,7 +6,7 @@ class Optimizer:
 
     def zero_grad(self):
         for p in self.params:
-            p.grad_fill(0)
+            p.grad.fill(0)
 
     def step(self):
         raise NotImplementedError
