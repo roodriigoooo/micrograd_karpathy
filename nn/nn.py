@@ -1,5 +1,5 @@
-from engine import *
-from utils import draw_dot
+from core.engine import *
+
 
 class Module:
     """

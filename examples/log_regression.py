@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from sklearn.datasets import make_moons
 from sklearn.linear_model import LogisticRegression as SkLogReg
 from sklearn.metrics import accuracy_score
-from engine import Value
+from core.engine import Value
 
 
 class LogisticRegression:

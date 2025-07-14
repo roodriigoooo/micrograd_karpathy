@@ -175,19 +175,28 @@ class Value:
         return out
 
     def relu(self):
-        out_data = np.maximum(0, self.data)
-        out = Value(out_data, (self,), 'relu')
-        def _backward():
-            self.grad += (out_data > 0) * out.grad
-        out._backward = _backward
-        return out
+        # since max(x, 0) is already diffable via .maximum
+        return self.maximum(0) #0 is autowrapped by @_ensure_value dec
 
     def softplus(self):
         # softplus(x) = log(1+exp(x))
-        sp = np.log1p(np.exp(self.data))
-        out = Value(sp, (self,), 'softplus')
+        # all three ops (exp, +, log) are native Value ops
+        return (self.exp() + 1).log() # again, auto-wrapped
+
+    def max(self, axis=None, keepdims=False):
+        """
+        if there a tie for the max, the incoming grad is divided equally among them
+        note: this is different from how torch behaves, which propagates gradients only
+        to the first element encountered with that maximum value
+        """
+        out_data = self.data.max(axis=axis, keepdims=keepdims)
+        out     = Value(out_data, (self,), 'max_reduce')
         def _backward():
-            self.grad += (1 / (1 + np.exp(-self.data))) * out.grad
+            mask = (self.data == out.data)
+            count = mask.sum(axis=axis, keepdims=True)
+            grad_broadcast = np.broadcast_to(out.grad, self.shape)
+            self.grad += mask * (grad_broadcast / count)
+
         out._backward = _backward
         return out
 
@@ -217,6 +226,32 @@ class Value:
         return out
 
     # --- Tensor manipulation ------------
+    def mean(self, axis=None, keepdims=False):
+        out_data = self.data.mean(axis=axis, keepdims=keepdims)
+        out = Value(out_data, (self,), 'mean')
+
+        if axis is None:
+            count = self.data.size
+            red_axes = tuple(range(self.data.ndim))
+        else:
+            red_axes = axis if isinstance(axis, tuple) else (axis,)
+            #handle negative axis
+            red_axes = tuple(ax if ax >= 0 else ax + self.data.ndim for ax in red_axes)
+            count = np.prod([self.data.shape[ax] for ax in red_axes], dtype=np.int32)
+
+        def _backward():
+            grad = out.grad / count
+
+            if not keepdims:
+                shape = list(out.grad.shape)
+                for ax in sorted(red_axes):
+                    shape.insert(ax,1)
+                grad = grad.reshape(shape)
+
+            self.grad += np.broadcast_to(grad, self.shape)
+
+        out._backward = _backward
+        return out
 
     def sum(self, axis=None, keepdims=False):
         out_data = self.data.sum(axis=axis, keepdims=keepdims)

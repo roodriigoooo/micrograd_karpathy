@@ -1,5 +1,5 @@
 import numpy as np
-from engine import Value
+from core.engine import Value
 from nn import MLP, SGD
 
 

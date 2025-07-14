@@ -1,7 +1,7 @@
 from graphviz import Digraph
 import numpy as np
 import math
-from engine import Value
+
 
 def trace(root):
     nodes, edges = set(), set()
