@@ -2,9 +2,8 @@ import numpy as np
 from core.engine import Value
 from nn.nn import MLP
 from optim.optim import SGD
-from utils import numerical_gradient
+from graph_utils import numerical_gradient
 import torch
-
 
 # --- Test Core Operations ---
 
